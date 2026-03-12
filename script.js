@@ -15,24 +15,28 @@ function logout() {
     window.location.href = "index.html";
 }
 
-// 4. VARIÁVEL GLOBAL
+// 4. VARIÁVEL GLOBAL PARA O PDF
 let todosResultadosPDF = [];
 
-// 5. BUSCA DE DADOS (CORRIGIDO PARA BUSCA AMPLA POR INSCRIÇÃO OU ID)
+// 5. BUSCA DE DADOS (CORRIGIDA E BLINDADA)
 async function buscarDados() {
     const campoBusca = document.getElementById('search');
-    const inscricaoBusca = campoBusca.value.trim();
+    const valorDigitado = campoBusca.value.trim();
     
-    if (!inscricaoBusca) {
+    if (!valorDigitado) {
         alert("Por favor, informe o número da Inscrição Municipal!");
         return;
     }
+
+    // Função para remover pontos, traços e espaços para comparação pura
+    const limpar = (txt) => txt.toString().replace(/\D/g, '');
+    const buscaLimpa = limpar(valorDigitado);
 
     const anos = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
     let resultadosBrutos = [];
     
     const tableBody = document.querySelector('#resultTable tbody');
-    tableBody.innerHTML = '<tr><td colspan="7">Localizando todas as edificações do imóvel...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="7">Localizando histórico completo (Edificações e Áreas)...</td></tr>';
 
     for (let ano of anos) {
         const url = `tabelas/${ano}.xlsx`;
@@ -43,31 +47,33 @@ async function buscarDados() {
             const data = await response.arrayBuffer();
             const workbook = XLSX.read(data, { type: 'array' });
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-            const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            
+            // defval: "" garante que colunas vazias não desloquem os dados
+            const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
 
             json.forEach(row => {
-                // CORREÇÃO: Verifica se a busca coincide com a Inscrição (Col A) OU com o ID (Col B)
-                const colInscricao = row[0] ? row[0].toString().trim() : "";
-                const colID = row[1] ? row[1].toString().trim() : "";
+                const colA = row[0] ? row[0].toString().trim() : ""; // Inscrição
+                const colB = row[1] ? row[1].toString().trim() : ""; // ID Agrupador
 
-                if (colInscricao === inscricaoBusca || colID === inscricaoBusca) {
+                // Se o que o usuário digitou bater com a Coluna A OU Coluna B (limpos)
+                if (limpar(colA) === buscaLimpa || limpar(colB) === buscaLimpa) {
                     resultadosBrutos.push({
-                        inscricao: colInscricao,
-                        id: colID || colInscricao,
+                        inscricao: colA,
+                        id: colB || colA,
                         logradouro: row[2] || '---',
                         numero: row[3] || '---',
                         quadra: row[4] || '---',
                         lote: row[5] || '---',
                         ano: ano,
-                        metragem: parseFloat(row[7] || 0),
-                        tipologia: row[8] || '',
-                        utilizacao: row[9] || 'N/A',
-                        estrutura: row[10] || 'N/A',
+                        metragem: parseFloat(row[7]) || 0, // Coluna H
+                        tipologia: row[8] || '',           // Coluna I
+                        utilizacao: row[9] || 'N/A',       // Coluna J
+                        estrutura: row[10] || 'N/A',       // Coluna K
                     });
                 }
             });
         } catch (error) {
-            console.error(`Erro no ano ${ano}:`, error);
+            console.error(`Erro ao processar ano ${ano}:`, error);
         }
     }
     
@@ -75,42 +81,42 @@ async function buscarDados() {
     exibirResultadosNaTela(resultadosBrutos);
 }
 
-// 6. EXIBIÇÃO NA TELA (SOMA DE METRAGEM POR ANO)
+// 6. EXIBIÇÃO NA TELA (SOMA TOTAL POR ANO)
 function exibirResultadosNaTela(resultados) {
     const tableBody = document.querySelector('#resultTable tbody');
     const btnPDF = document.getElementById('btnPDF');
     tableBody.innerHTML = '';
 
     if (resultados.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="7">Nenhum registro encontrado.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="7">Nenhum registro encontrado para esta inscrição.</td></tr>`;
         if(btnPDF) btnPDF.style.display = 'none';
         return;
     }
 
     if(btnPDF) btnPDF.style.display = 'inline-block';
 
-    const anosUnicos = [...new Set(resultados.map(r => r.ano))];
+    const anosPresentes = [...new Set(resultados.map(r => r.ano))];
     
-    anosUnicos.forEach(ano => {
-        const regs = resultados.filter(r => r.ano === ano);
-        const somaMetragem = regs.reduce((acc, curr) => acc + curr.metragem, 0); // Soma total do ano
-        const p = regs[0];
+    anosPresentes.forEach(ano => {
+        const regsDoAno = resultados.filter(r => r.ano === ano);
+        const somaMetragem = regsDoAno.reduce((acc, curr) => acc + curr.metragem, 0);
+        const ref = regsDoAno[0];
 
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${p.id}</td>
-            <td>${p.quadra}</td>
-            <td>${p.lote}</td>
-            <td>${ano}</td>
+            <td>${ref.id}</td>
+            <td>${ref.quadra}</td>
+            <td>${ref.lote}</td>
+            <td><strong>${ano}</strong></td>
             <td>${somaMetragem.toFixed(2)} m²</td>
-            <td>${regs.length > 1 ? "MÚLTIPLAS" : p.utilizacao}</td>
-            <td>${regs.length > 1 ? "MISTA" : p.estrutura}</td>
+            <td>${regsDoAno.length > 1 ? "MÚLTIPLAS" : ref.utilizacao}</td>
+            <td>${regsDoAno.length > 1 ? "MISTA / VER PDF" : ref.estrutura}</td>
         `;
         tableBody.appendChild(row);
     });
 }
 
-// 7. GERAÇÃO DO PDF (PROCESSAMENTO DE MÚLTIPLAS EDIFICAÇÕES POR ANO)
+// 7. GERAÇÃO DO PDF (CERTIDÃO NARRATIVA COMPLETA)
 async function gerarPDF() {
     if (todosResultadosPDF.length === 0) return;
 
@@ -118,11 +124,12 @@ async function gerarPDF() {
     const doc = new jsPDF();
     
     const dataObj = new Date();
-    const dataFormatada = dataObj.toLocaleDateString('pt-BR'); // Apenas data, sem hora
+    const dataFormatada = dataObj.toLocaleDateString('pt-BR');
     const dataExtenso = dataObj.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 
-    // Cabeçalho
+    // Cabeçalho Institucional
     doc.setFont("times", "bold");
+    doc.setFontSize(14);
     doc.text("ESTADO DO PARANÁ", 105, 15, { align: "center" });
     doc.text("PREFEITURA MUNICIPAL", 105, 22, { align: "center" });
     doc.setFontSize(10);
@@ -134,58 +141,79 @@ async function gerarPDF() {
     doc.setFont("times", "bold");
     doc.text("CERTIDÃO NARRATIVA TÉCNICA ADMINISTRATIVA", 105, 45, { align: "center" });
 
+    // Dados do Imóvel (usa o último registro como referência de endereço)
     const u = todosResultadosPDF[todosResultadosPDF.length - 1];
     doc.setFontSize(11);
     doc.setFont("times", "normal");
-    let texto = `Certifica-se que o imóvel sob o ID nº ${u.id}, Quadra ${u.quadra}, Lote ${u.lote}, apresenta a seguinte evolução cadastral:`;
-    doc.text(doc.splitTextToSize(texto, 170), 20, 55);
+    let textoIntro = `CERTIFICA-SE para os devidos fins que o imóvel identificado pelo ID nº ${u.id}, Quadra ${u.quadra}, Lote ${u.lote}, localizado na ${u.logradouro}, nº ${u.numero}, apresenta a seguinte evolução de área edificada:`;
+    doc.text(doc.splitTextToSize(textoIntro, 170), 20, 55);
 
-    const headers = [["Inscrição (ID)", "Ano", "Descrição das Edificações", "Metragem Total"]];
+    // Tabela Analítica
+    const headers = [["ID / INSCRIÇÃO", "ANO", "DESCRIÇÃO DAS EDIFICAÇÕES", "ÁREA TOTAL"]];
     const dataRows = [];
-    const anos = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
+    const listaAnos = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
 
-    anos.forEach(ano => {
+    listaAnos.forEach(ano => {
         const regs = todosResultadosPDF.filter(r => r.ano === ano);
         if (regs.length > 0) {
-            let desc = "";
-            let totalArea = 0;
+            let descritivo = "";
+            let areaAnual = 0;
+            
             regs.forEach(r => {
                 if(r.metragem > 0) {
-                    desc += `• ${r.tipologia} (${r.metragem}m² - ${r.estrutura})\n`; // Detalha cada item
-                    totalArea += r.metragem;
+                    descritivo += `• ${r.tipologia} (${r.estrutura}): ${r.metragem.toFixed(2)}m²\n`;
+                    areaAnual += r.metragem;
                 }
             });
-            if (totalArea === 0) desc = "TERRENO VAGO";
+
+            if (areaAnual === 0) descritivo = "TERRENO VAGO";
 
             dataRows.push([
                 regs[0].id,
                 ano.toString(),
-                desc.trim(),
-                `${totalArea.toFixed(2)} m²`
+                descritivo.trim(),
+                `${areaAnual.toFixed(2)} m²`
             ]);
         }
     });
 
     doc.autoTable({
-        startY: 65,
+        startY: 75,
         head: headers,
         body: dataRows,
         theme: 'grid',
-        headStyles: { fillColor: [44, 62, 80] },
-        styles: { font: "times", fontSize: 9 },
-        columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 15 }, 2: { cellWidth: 95 }, 3: { cellWidth: 25 } }
+        headStyles: { fillColor: [44, 62, 80], fontStyle: 'bold' },
+        styles: { font: "times", fontSize: 9, cellPadding: 3 },
+        columnStyles: { 
+            0: { cellWidth: 40 }, 
+            1: { cellWidth: 15 }, 
+            2: { cellWidth: 95 }, 
+            3: { cellWidth: 25 } 
+        }
     });
 
-    const finalY = doc.lastAutoTable.finalY + 20;
+    // Assinatura
+    const finalY = doc.lastAutoTable.finalY + 25;
     doc.text(`Cambé/PR, ${dataExtenso}.`, 20, finalY);
-    doc.text("Agente Administrativo Responsável", 105, finalY + 30, { align: "center" });
+    doc.line(70, finalY + 20, 140, finalY + 20);
+    doc.text("Agente Administrativo Responsável", 105, finalY + 25, { align: "center" });
 
     doc.save(`Certidao_${u.id}.pdf`);
 }
 
-// 8. EVENTOS E LIMPEZA
-document.getElementById("btnOrientacoes").addEventListener("click", () => document.getElementById("manual").classList.add("ativo"));
-document.getElementById("btnFechar").addEventListener("click", () => document.getElementById("manual").classList.remove("ativo"));
+// 8. EVENTOS DE INTERAÇÃO
+document.getElementById("btnOrientacoes").addEventListener("click", () => {
+    document.getElementById("manual").classList.add("ativo");
+});
+
+document.getElementById("btnFechar").addEventListener("click", () => {
+    document.getElementById("manual").classList.remove("ativo");
+});
+
+// Atalho Enter para busca
+document.getElementById("search").addEventListener("keypress", (e) => {
+    if (e.key === "Enter") buscarDados();
+});
 
 function limparConsulta() {
     document.getElementById('search').value = "";
