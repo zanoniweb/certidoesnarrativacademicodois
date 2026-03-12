@@ -61,6 +61,7 @@ async function buscarDados() {
             const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
             json.forEach(row => {
+                // Filtro rigoroso pela inscrição exata ou parcial conforme planilha
                 if (row[0] && row[0].toString().includes(inscricao)) {
                     resultados.push({
                         inscricao: row[0],
@@ -115,13 +116,14 @@ function exibirResultados(resultados) {
     });
 }
 
-// 7. GERAÇÃO DA CERTIDÃO NARRATIVA (COM AGRUPAMENTO POR ANO)
+// 7. GERAÇÃO DA CERTIDÃO NARRATIVA ATUALIZADA
 async function gerarPDF() {
     if (todosResultadosPDF.length === 0) return;
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     
+    // Configuração de Data (Sem Hora)
     const dataObj = new Date();
     const dataFormatada = dataObj.toLocaleDateString('pt-BR');
     const dataExtenso = dataObj.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -157,55 +159,51 @@ async function gerarPDF() {
     const splitTexto = doc.splitTextToSize(textoNarrativo, 170);
     doc.text(splitTexto, 20, 70);
 
-    // Soma total de 2026 para o parecer
-    const resultados2026 = todosResultadosPDF.filter(r => r.ano === 2026);
-    const areaTotal2026 = resultados2026.reduce((acc, curr) => acc + curr.metragem, 0);
-    const utilizacoesUnicas = [...new Set(resultados2026.map(r => r.utilizacao))].join(" / ");
-    const estruturasUnicas = [...new Set(resultados2026.map(r => r.estrutura))].join(" / ");
+    // Soma total do último ano para o parecer inicial
+    const anoAtual = ultimoRegistro.ano;
+    const registrosUltimoAno = todosResultadosPDF.filter(r => r.ano === anoAtual);
+    const areaTotalParecer = registrosUltimoAno.reduce((acc, curr) => acc + curr.metragem, 0);
 
     let parecer = "";
-    if (areaTotal2026 === 0) {
-        parecer = `I - Constatou-se que o imóvel supracitado é classificado tecnicamente como TERRENO VAGO, inexistindo benfeitorias averbadas até o exercício de 2026.`;
+    if (areaTotalParecer === 0) {
+        parecer = `I - Constatou-se que o imóvel supracitado é classificado tecnicamente como TERRENO VAGO, inexistindo benfeitorias averbadas até o exercício de ${anoAtual}.`;
     } else {
-        parecer = `I - Constatou-se que o imóvel supracitado possui EDIFICAÇÃO CONSOLIDADA com destinação de utilização ${utilizacoesUnicas} e padrão estrutural de ${estruturasUnicas}, totalizando área construída de ${areaTotal2026} m², conforme dados cadastrais atualizados em 2026.`;
+        const utilizacoes = [...new Set(registrosUltimoAno.map(r => r.utilizacao))].join(" / ");
+        const estruturas = [...new Set(registrosUltimoAno.map(r => r.estrutura))].join(" / ");
+        parecer = `I - Constatou-se que o imóvel supracitado possui EDIFICAÇÃO CONSOLIDADA com destinação de utilização ${utilizacoes} e padrão estrutural de ${estruturas}, totalizando área construída de ${areaTotalParecer} m², conforme dados cadastrais atualizados em ${anoAtual}.`;
     }
 
     const splitParecer = doc.splitTextToSize(parecer, 170);
     doc.text(splitParecer, 20, 95);
 
-    // II - QUADRO ANALÍTICO (AGRUPADO POR ANO)
+    // II - QUADRO ANALÍTICO CORRIGIDO (ID | ANO | DESCRIÇÃO | METRAGEM)
     doc.setFont("times", "bold");
     doc.text("II - QUADRO ANALÍTICO DE EVOLUÇÃO CADASTRAL (2020-2026):", 20, 115);
 
     const headers = [["Inscrição (ID)", "Ano", "Descrição das Edificações", "Metragem Total"]];
-    
-    // Lógica de agrupamento por ano
-    const anos = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
+    const anosValidos = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
     const dataRows = [];
 
-    anos.forEach(ano => {
+    anosValidos.forEach(ano => {
         const registrosDoAno = todosResultadosPDF.filter(r => r.ano === ano);
         if (registrosDoAno.length > 0) {
-            let descricoes = [];
-            let somaMetragem = 0;
+            let descritivoAno = "";
+            let somaAno = 0;
 
             registrosDoAno.forEach(reg => {
-                if (reg.utilizacao.toUpperCase().includes("TERRENO VAGO") || reg.metragem === 0) {
-                    descricoes.push("TERRENO VAGO");
-                } else {
-                    descricoes.push(`${reg.tipologia} | Área: ${reg.metragem}m² | Estrutura: ${reg.estrutura} | Uso: ${reg.utilizacao}`);
-                    somaMetragem += reg.metragem;
+                if (reg.metragem > 0) {
+                    descritivoAno += `${reg.tipologia} | Área: ${reg.metragem}m² | Estrutura: ${reg.estrutura} | Uso: ${reg.utilizacao}\n`;
+                    somaAno += reg.metragem;
                 }
             });
 
-            // Remover duplicados de "TERRENO VAGO" se houver mais de um registro vago no mesmo ano
-            const descFinal = [...new Set(descricoes)].join("\n");
-            
+            if (somaAno === 0) descritivoAno = "TERRENO VAGO";
+
             dataRows.push([
                 registrosDoAno[0].id,
                 ano.toString(),
-                descFinal,
-                somaMetragem > 0 ? `${somaMetragem} m²` : "0"
+                descritivoAno.trim(),
+                somaAno > 0 ? `${somaAno} m²` : "0"
             ]);
         }
     });
@@ -216,40 +214,47 @@ async function gerarPDF() {
         body: dataRows,
         theme: 'grid',
         headStyles: { fillColor: [44, 62, 80], textColor: [255, 255, 255], fontStyle: 'bold' },
-        styles: { font: "times", fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+        styles: { font: "times", fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
         columnStyles: {
-            0: { cellWidth: 35 },
-            1: { cellWidth: 15 },
-            2: { cellWidth: 100 },
-            3: { cellWidth: 25 }
+            0: { cellWidth: 40 }, // Inscrição
+            1: { cellWidth: 15 }, // Ano
+            2: { cellWidth: 95 }, // Descrição
+            3: { cellWidth: 20 }  // Metragem
         },
         margin: { left: 20, right: 20 }
     });
 
-    // Rodapé
+    // Rodapé (Sem Hora)
     const finalY = doc.lastAutoTable.finalY + 20;
     doc.setFontSize(10);
+    doc.setFont("times", "italic");
     doc.text(`O referido é verdade e dou fé. Certidão emitida via sistema eletrônico em ${dataFormatada}.`, 20, finalY);
-    doc.text(`Cambé/PR, ${dataExtenso}.`, 20, finalY + 8);
+    
+    doc.setFont("times", "normal");
+    doc.text(`Cambé/PR, ${dataExtenso}.`, 20, finalY + 10);
 
     doc.line(70, finalY + 35, 140, finalY + 35);
     doc.setFont("times", "bold");
     doc.text("Agente Administrativo Responsável", 105, finalY + 40, { align: "center" });
 
-    doc.save(`Certidao_${ultimoRegistro.inscricao}.pdf`);
+    doc.save(`Certidao_Narrativa_${ultimoRegistro.inscricao}.pdf`);
 }
 
-// 8. EVENTOS
+// 8. EVENTOS E INTERAÇÃO
 document.getElementById("btnOrientacoes").addEventListener("click", () => document.getElementById("manual").classList.add("ativo"));
 document.getElementById("btnFechar").addEventListener("click", () => document.getElementById("manual").classList.remove("ativo"));
 
 document.getElementById("search").addEventListener("keypress", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); buscarDados(); }
+    if (e.key === "Enter") {
+        e.preventDefault();
+        buscarDados();
+    }
 });
 
 function limparConsulta() {
     document.getElementById('search').value = "";
     document.querySelector('#resultTable tbody').innerHTML = "";
-    document.getElementById('btnPDF').style.display = 'none';
+    const btnPDF = document.getElementById('btnPDF');
+    if (btnPDF) btnPDF.style.display = 'none';
     todosResultadosPDF = [];
 }
