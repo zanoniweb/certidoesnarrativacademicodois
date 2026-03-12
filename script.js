@@ -14,7 +14,6 @@ function login() {
     let username = document.getElementById("username").value;
     let password = document.getElementById("password").value;
     let errorMessage = document.getElementById("error-message");
-
     let user = users.find(u => u.username === username && u.password === password);
 
     if (user) {
@@ -30,10 +29,10 @@ function logout() {
     window.location.href = "index.html";
 }
 
-// 4. VARIÁVEL GLOBAL PARA O HISTÓRICO
+// 4. VARIÁVEL GLOBAL
 let todosResultadosPDF = [];
 
-// 5. BUSCA DE DADOS (2020-2026)
+// 5. BUSCA DE DADOS (AGRUPAMENTO REQUINTADO POR ANO)
 async function buscarDados() {
     const campoBusca = document.getElementById('search');
     const inscricao = campoBusca.value.trim();
@@ -44,10 +43,10 @@ async function buscarDados() {
     }
 
     const anos = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
-    let resultados = [];
+    let resultadosBrutos = [];
     
     const tableBody = document.querySelector('#resultTable tbody');
-    tableBody.innerHTML = '<tr><td colspan="7">Consultando base de dados histórica...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="7">Processando histórico cadastral...</td></tr>';
 
     for (let ano of anos) {
         const url = `tabelas/${ano}.xlsx`;
@@ -61,9 +60,8 @@ async function buscarDados() {
             const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
             json.forEach(row => {
-                // Filtro rigoroso pela inscrição exata ou parcial conforme planilha
                 if (row[0] && row[0].toString().includes(inscricao)) {
-                    resultados.push({
+                    resultadosBrutos.push({
                         inscricao: row[0],
                         id: row[1] || row[0],
                         logradouro: row[2] || 'RUA JACA',
@@ -82,11 +80,14 @@ async function buscarDados() {
             console.error(`Erro no processamento (Ano ${ano}):`, error);
         }
     }
-    exibirResultados(resultados);
+    
+    // Armazena os brutos para o PDF processar o agrupamento
+    todosResultadosPDF = resultadosBrutos;
+    exibirResultadosNaTela(resultadosBrutos);
 }
 
-// 6. EXIBIÇÃO NA TELA
-function exibirResultados(resultados) {
+// 6. EXIBIÇÃO NA TELA (SINTETIZADA POR ANO)
+function exibirResultadosNaTela(resultados) {
     const tableBody = document.querySelector('#resultTable tbody');
     const btnPDF = document.getElementById('btnPDF');
     tableBody.innerHTML = '';
@@ -94,167 +95,120 @@ function exibirResultados(resultados) {
     if (resultados.length === 0) {
         tableBody.innerHTML = `<tr><td colspan="7">Nenhum registro encontrado.</td></tr>`;
         if(btnPDF) btnPDF.style.display = 'none';
-        todosResultadosPDF = [];
         return;
     }
 
-    todosResultadosPDF = resultados; 
     if(btnPDF) btnPDF.style.display = 'inline-block';
 
-    resultados.forEach(res => {
+    const anosSet = [...new Set(resultados.map(r => r.ano))];
+    
+    anosSet.forEach(ano => {
+        const regs = resultados.filter(r => r.ano === ano);
+        const somaMetragem = regs.reduce((acc, curr) => acc + curr.metragem, 0);
+        const primeiro = regs[0];
+
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${res.inscricao}</td>
-            <td>${res.quadra}</td>
-            <td>${res.lote}</td>
-            <td>${res.ano}</td>
-            <td>${res.metragem}</td>
-            <td>${res.utilizacao}</td>
-            <td>${res.estrutura}</td>
+            <td>${primeiro.inscricao}</td>
+            <td>${primeiro.quadra}</td>
+            <td>${primeiro.lote}</td>
+            <td><strong>${ano}</strong></td>
+            <td>${somaMetragem.toFixed(2)} m²</td>
+            <td>${regs.length > 1 ? "Múltiplas" : primeiro.utilizacao}</td>
+            <td>${regs.length > 1 ? "Mista" : primeiro.estrutura}</td>
         `;
         tableBody.appendChild(row);
     });
 }
 
-// 7. GERAÇÃO DA CERTIDÃO NARRATIVA ATUALIZADA
+// 7. GERAÇÃO DO PDF (PROCESSAMENTO DE MÚLTIPLAS EDIFICAÇÕES POR ANO)
 async function gerarPDF() {
     if (todosResultadosPDF.length === 0) return;
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-    
-    // Configuração de Data (Sem Hora)
     const dataObj = new Date();
     const dataFormatada = dataObj.toLocaleDateString('pt-BR');
     const dataExtenso = dataObj.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 
-    // Layout Institucional
+    // Cabeçalho Institucional
     doc.setFont("times", "bold");
     doc.setFontSize(14);
     doc.text("ESTADO DO PARANÁ", 105, 15, { align: "center" });
     doc.text("PREFEITURA MUNICIPAL", 105, 22, { align: "center" });
-    
     doc.setFontSize(10);
     doc.setFont("times", "normal");
-    doc.text([
-        "Secretaria Municipal da Fazenda",
-        "Divisão de Cadastro Imobiliário",
-        "Documento gerado em: " + dataFormatada
-    ], 105, 30, { align: "center" });
-    
-    doc.setLineWidth(0.4);
+    doc.text(["Secretaria Municipal da Fazenda", "Divisão de Cadastro Imobiliário", `Documento gerado em: ${dataFormatada}`], 105, 30, { align: "center" });
     doc.line(20, 42, 190, 42);
 
     doc.setFontSize(12);
     doc.setFont("times", "bold");
     doc.text("CERTIDÃO NARRATIVA TÉCNICA ADMINISTRATIVA", 105, 55, { align: "center" });
 
-    const ultimoRegistro = todosResultadosPDF[todosResultadosPDF.length - 1];
-    
+    // Dados do Imóvel
+    const ultimo = todosResultadosPDF[todosResultadosPDF.length - 1];
     doc.setFontSize(11);
     doc.setFont("times", "normal");
-    
-    let textoNarrativo = `O MUNICÍPIO, no exercício de suas competências tributárias e administrativas, CERTIFICA para os devidos fins que, em consulta aos registros imobiliários consolidados, identificou-se que o imóvel sob a Inscrição Municipal nº ${ultimoRegistro.inscricao}, localizado na ${ultimoRegistro.logradouro}, nº ${ultimoRegistro.numero}, correspondente à Quadra ${ultimoRegistro.quadra} e Lote ${ultimoRegistro.lote}, apresenta a seguinte situação fática e jurídica:`;
+    let textoNarrativo = `CERTIFICA-SE que o imóvel sob a Inscrição Municipal nº ${ultimo.inscricao}, localizado na ${ultimo.logradouro}, nº ${ultimo.numero}, Quadra ${ultimo.quadra}, Lote ${ultimo.lote}, apresenta a seguinte evolução cadastral:`;
+    doc.text(doc.splitTextToSize(textoNarrativo, 170), 20, 70);
 
-    const splitTexto = doc.splitTextToSize(textoNarrativo, 170);
-    doc.text(splitTexto, 20, 70);
-
-    // Soma total do último ano para o parecer inicial
-    const anoAtual = ultimoRegistro.ano;
-    const registrosUltimoAno = todosResultadosPDF.filter(r => r.ano === anoAtual);
-    const areaTotalParecer = registrosUltimoAno.reduce((acc, curr) => acc + curr.metragem, 0);
-
-    let parecer = "";
-    if (areaTotalParecer === 0) {
-        parecer = `I - Constatou-se que o imóvel supracitado é classificado tecnicamente como TERRENO VAGO, inexistindo benfeitorias averbadas até o exercício de ${anoAtual}.`;
-    } else {
-        const utilizacoes = [...new Set(registrosUltimoAno.map(r => r.utilizacao))].join(" / ");
-        const estruturas = [...new Set(registrosUltimoAno.map(r => r.estrutura))].join(" / ");
-        parecer = `I - Constatou-se que o imóvel supracitado possui EDIFICAÇÃO CONSOLIDADA com destinação de utilização ${utilizacoes} e padrão estrutural de ${estruturas}, totalizando área construída de ${areaTotalParecer} m², conforme dados cadastrais atualizados em ${anoAtual}.`;
-    }
-
-    const splitParecer = doc.splitTextToSize(parecer, 170);
-    doc.text(splitParecer, 20, 95);
-
-    // II - QUADRO ANALÍTICO CORRIGIDO (ID | ANO | DESCRIÇÃO | METRAGEM)
-    doc.setFont("times", "bold");
-    doc.text("II - QUADRO ANALÍTICO DE EVOLUÇÃO CADASTRAL (2020-2026):", 20, 115);
-
-    const headers = [["Inscrição (ID)", "Ano", "Descrição das Edificações", "Metragem Total"]];
-    const anosValidos = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
+    // Quadro Analítico Processado
+    const headers = [["Inscrição (ID)", "Ano", "Descrição das Edificações", "Área Total"]];
     const dataRows = [];
+    const anosValidos = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
 
     anosValidos.forEach(ano => {
-        const registrosDoAno = todosResultadosPDF.filter(r => r.ano === ano);
-        if (registrosDoAno.length > 0) {
-            let descritivoAno = "";
-            let somaAno = 0;
+        const registros = todosResultadosPDF.filter(r => r.ano === ano);
+        if (registros.length > 0) {
+            let descritivo = "";
+            let somaMetragem = 0;
 
-            registrosDoAno.forEach(reg => {
+            registros.forEach(reg => {
                 if (reg.metragem > 0) {
-                    descritivoAno += `${reg.tipologia} | Área: ${reg.metragem}m² | Estrutura: ${reg.estrutura} | Uso: ${reg.utilizacao}\n`;
-                    somaAno += reg.metragem;
+                    descritivo += `• ${reg.tipologia}: ${reg.metragem}m² (${reg.estrutura})\n`;
+                    somaMetragem += reg.metragem;
                 }
             });
 
-            if (somaAno === 0) descritivoAno = "TERRENO VAGO";
+            if (somaMetragem === 0) descritivo = "TERRENO VAGO";
 
             dataRows.push([
-                registrosDoAno[0].id,
+                registros[0].id,
                 ano.toString(),
-                descritivoAno.trim(),
-                somaAno > 0 ? `${somaAno} m²` : "0"
+                descritivo.trim(),
+                `${somaMetragem.toFixed(2)} m²`
             ]);
         }
     });
 
     doc.autoTable({
-        startY: 120,
+        startY: 90,
         head: headers,
         body: dataRows,
         theme: 'grid',
-        headStyles: { fillColor: [44, 62, 80], textColor: [255, 255, 255], fontStyle: 'bold' },
-        styles: { font: "times", fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
-        columnStyles: {
-            0: { cellWidth: 40 }, // Inscrição
-            1: { cellWidth: 15 }, // Ano
-            2: { cellWidth: 95 }, // Descrição
-            3: { cellWidth: 20 }  // Metragem
-        },
-        margin: { left: 20, right: 20 }
+        headStyles: { fillColor: [44, 62, 80], fontStyle: 'bold' },
+        styles: { font: "times", fontSize: 8, cellPadding: 2 },
+        columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 15 }, 2: { cellWidth: 100 }, 3: { cellWidth: 20 } }
     });
 
-    // Rodapé (Sem Hora)
-    const finalY = doc.lastAutoTable.finalY + 20;
+    // Assinatura e Data
+    const finalY = doc.lastAutoTable.finalY + 30;
     doc.setFontSize(10);
-    doc.setFont("times", "italic");
-    doc.text(`O referido é verdade e dou fé. Certidão emitida via sistema eletrônico em ${dataFormatada}.`, 20, finalY);
-    
-    doc.setFont("times", "normal");
-    doc.text(`Cambé/PR, ${dataExtenso}.`, 20, finalY + 10);
+    doc.text(`Cambé/PR, ${dataExtenso}.`, 20, finalY);
+    doc.line(70, finalY + 25, 140, finalY + 25);
+    doc.text("Agente Administrativo Responsável", 105, finalY + 30, { align: "center" });
 
-    doc.line(70, finalY + 35, 140, finalY + 35);
-    doc.setFont("times", "bold");
-    doc.text("Agente Administrativo Responsável", 105, finalY + 40, { align: "center" });
-
-    doc.save(`Certidao_Narrativa_${ultimoRegistro.inscricao}.pdf`);
+    doc.save(`Certidao_${ultimo.inscricao}.pdf`);
 }
 
-// 8. EVENTOS E INTERAÇÃO
+// 8. EVENTOS
 document.getElementById("btnOrientacoes").addEventListener("click", () => document.getElementById("manual").classList.add("ativo"));
 document.getElementById("btnFechar").addEventListener("click", () => document.getElementById("manual").classList.remove("ativo"));
-
-document.getElementById("search").addEventListener("keypress", (e) => {
-    if (e.key === "Enter") {
-        e.preventDefault();
-        buscarDados();
-    }
-});
+document.getElementById("search").addEventListener("keypress", (e) => { if (e.key === "Enter") buscarDados(); });
 
 function limparConsulta() {
     document.getElementById('search').value = "";
     document.querySelector('#resultTable tbody').innerHTML = "";
-    const btnPDF = document.getElementById('btnPDF');
-    if (btnPDF) btnPDF.style.display = 'none';
+    document.getElementById('btnPDF').style.display = 'none';
     todosResultadosPDF = [];
 }
