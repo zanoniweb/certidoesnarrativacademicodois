@@ -18,12 +18,12 @@ function logout() {
 // 4. VARIÁVEL GLOBAL
 let todosResultadosPDF = [];
 
-// 5. BUSCA DE DADOS (AGRUPAMENTO POR ANO)
+// 5. BUSCA DE DADOS (CORRIGIDO PARA BUSCA AMPLA POR INSCRIÇÃO OU ID)
 async function buscarDados() {
     const campoBusca = document.getElementById('search');
-    const inscricao = campoBusca.value.trim();
+    const inscricaoBusca = campoBusca.value.trim();
     
-    if (!inscricao) {
+    if (!inscricaoBusca) {
         alert("Por favor, informe o número da Inscrição Municipal!");
         return;
     }
@@ -32,7 +32,7 @@ async function buscarDados() {
     let resultadosBrutos = [];
     
     const tableBody = document.querySelector('#resultTable tbody');
-    tableBody.innerHTML = '<tr><td colspan="7">Processando histórico real por ano...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="7">Localizando todas as edificações do imóvel...</td></tr>';
 
     for (let ano of anos) {
         const url = `tabelas/${ano}.xlsx`;
@@ -46,11 +46,14 @@ async function buscarDados() {
             const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
             json.forEach(row => {
-                // Filtra exatamente pela inscrição fornecida
-                if (row[0] && row[0].toString().trim() === inscricao) {
+                // CORREÇÃO: Verifica se a busca coincide com a Inscrição (Col A) OU com o ID (Col B)
+                const colInscricao = row[0] ? row[0].toString().trim() : "";
+                const colID = row[1] ? row[1].toString().trim() : "";
+
+                if (colInscricao === inscricaoBusca || colID === inscricaoBusca) {
                     resultadosBrutos.push({
-                        inscricao: row[0],
-                        id: row[1] || row[0],
+                        inscricao: colInscricao,
+                        id: colID || colInscricao,
                         logradouro: row[2] || '---',
                         numero: row[3] || '---',
                         quadra: row[4] || '---',
@@ -72,7 +75,7 @@ async function buscarDados() {
     exibirResultadosNaTela(resultadosBrutos);
 }
 
-// 6. EXIBIÇÃO NA TELA (CORRIGIDA)
+// 6. EXIBIÇÃO NA TELA (SOMA DE METRAGEM POR ANO)
 function exibirResultadosNaTela(resultados) {
     const tableBody = document.querySelector('#resultTable tbody');
     const btnPDF = document.getElementById('btnPDF');
@@ -86,21 +89,20 @@ function exibirResultadosNaTela(resultados) {
 
     if(btnPDF) btnPDF.style.display = 'inline-block';
 
-    // Agrupa por ano para somar metragens na exibição de tela
     const anosUnicos = [...new Set(resultados.map(r => r.ano))];
     
     anosUnicos.forEach(ano => {
         const regs = resultados.filter(r => r.ano === ano);
-        const somaMetragem = regs.reduce((acc, curr) => acc + curr.metragem, 0);
+        const somaMetragem = regs.reduce((acc, curr) => acc + curr.metragem, 0); // Soma total do ano
         const p = regs[0];
 
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${p.inscricao}</td>
+            <td>${p.id}</td>
             <td>${p.quadra}</td>
             <td>${p.lote}</td>
             <td>${ano}</td>
-            <td>${somaMetragem.toFixed(2)}</td>
+            <td>${somaMetragem.toFixed(2)} m²</td>
             <td>${regs.length > 1 ? "MÚLTIPLAS" : p.utilizacao}</td>
             <td>${regs.length > 1 ? "MISTA" : p.estrutura}</td>
         `;
@@ -108,16 +110,15 @@ function exibirResultadosNaTela(resultados) {
     });
 }
 
-// 7. GERAÇÃO DO PDF (SEM HORA E COM COLUNA ANO CORRETA)
+// 7. GERAÇÃO DO PDF (PROCESSAMENTO DE MÚLTIPLAS EDIFICAÇÕES POR ANO)
 async function gerarPDF() {
     if (todosResultadosPDF.length === 0) return;
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     
-    // Formatação de data apenas (sem hora) conforme solicitado
     const dataObj = new Date();
-    const dataFormatada = dataObj.toLocaleDateString('pt-BR');
+    const dataFormatada = dataObj.toLocaleDateString('pt-BR'); // Apenas data, sem hora
     const dataExtenso = dataObj.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 
     // Cabeçalho
@@ -136,10 +137,9 @@ async function gerarPDF() {
     const u = todosResultadosPDF[todosResultadosPDF.length - 1];
     doc.setFontSize(11);
     doc.setFont("times", "normal");
-    let texto = `Certifica-se que o imóvel Inscrição nº ${u.inscricao}, Quadra ${u.quadra}, Lote ${u.lote}, apresenta a seguinte evolução:`;
+    let texto = `Certifica-se que o imóvel sob o ID nº ${u.id}, Quadra ${u.quadra}, Lote ${u.lote}, apresenta a seguinte evolução cadastral:`;
     doc.text(doc.splitTextToSize(texto, 170), 20, 55);
 
-    // Ajuste das Colunas: Inscrição | Ano | Descrição | Metragem
     const headers = [["Inscrição (ID)", "Ano", "Descrição das Edificações", "Metragem Total"]];
     const dataRows = [];
     const anos = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
@@ -151,7 +151,7 @@ async function gerarPDF() {
             let totalArea = 0;
             regs.forEach(r => {
                 if(r.metragem > 0) {
-                    desc += `${r.tipologia} (${r.estrutura})\n`;
+                    desc += `• ${r.tipologia} (${r.metragem}m² - ${r.estrutura})\n`; // Detalha cada item
                     totalArea += r.metragem;
                 }
             });
@@ -180,10 +180,10 @@ async function gerarPDF() {
     doc.text(`Cambé/PR, ${dataExtenso}.`, 20, finalY);
     doc.text("Agente Administrativo Responsável", 105, finalY + 30, { align: "center" });
 
-    doc.save(`Certidao_${u.inscricao}.pdf`);
+    doc.save(`Certidao_${u.id}.pdf`);
 }
 
-// 8. EVENTOS
+// 8. EVENTOS E LIMPEZA
 document.getElementById("btnOrientacoes").addEventListener("click", () => document.getElementById("manual").classList.add("ativo"));
 document.getElementById("btnFechar").addEventListener("click", () => document.getElementById("manual").classList.remove("ativo"));
 
