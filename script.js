@@ -33,7 +33,7 @@ function logout() {
 // 4. VARIÁVEL GLOBAL PARA O HISTÓRICO
 let todosResultadosPDF = [];
 
-// 5. BUSCA DE DADOS (2020-2026) - AJUSTADO PARA COLETAR LOGRADOURO E TIPOLOGIA
+// 5. BUSCA DE DADOS (2020-2026)
 async function buscarDados() {
     const campoBusca = document.getElementById('search');
     const inscricao = campoBusca.value.trim();
@@ -60,21 +60,20 @@ async function buscarDados() {
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
             const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-            // Mapeamento baseado na imagem da planilha Excel fornecida
             json.forEach(row => {
                 if (row[0] && row[0].toString().includes(inscricao)) {
                     resultados.push({
-                        inscricao: row[0], // Coluna A (INSCRICAO)
-                        id: row[1] || row[0], // Coluna B (ID)
-                        logradouro: row[2] || 'RUA NÃO INFORMADA', // Coluna C (LOGRADOURO)
-                        numero: row[3] || 'S/N', // Coluna D (NÚMERO)
-                        quadra: row[4] || '---', // Coluna E (QUADRA)
-                        lote: row[5] || '---',   // Coluna F (LOTE)
-                        ano: ano,                // Ano do arquivo
-                        metragem: row[7] || '0', // Coluna H (METRAGEM)
-                        tipologia: row[8] || '', // Coluna I (TIPOLOGIA)
-                        utilizacao: row[9] || 'N/A', // Coluna J (UTILIZACAO)
-                        estrutura: row[10] || 'N/A', // Coluna K (ESTRUTURA)
+                        inscricao: row[0],
+                        id: row[1] || row[0],
+                        logradouro: row[2] || 'RUA JACA',
+                        numero: row[3] || '0',
+                        quadra: row[4] || '---',
+                        lote: row[5] || '---',
+                        ano: ano,
+                        metragem: parseFloat(row[7] || 0),
+                        tipologia: row[8] || '',
+                        utilizacao: row[9] || 'N/A',
+                        estrutura: row[10] || 'N/A',
                     });
                 }
             });
@@ -92,7 +91,7 @@ function exibirResultados(resultados) {
     tableBody.innerHTML = '';
 
     if (resultados.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="7">Nenhum registro encontrado para a inscrição informada.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="7">Nenhum registro encontrado.</td></tr>`;
         if(btnPDF) btnPDF.style.display = 'none';
         todosResultadosPDF = [];
         return;
@@ -116,20 +115,15 @@ function exibirResultados(resultados) {
     });
 }
 
-// 7. GERAÇÃO DA CERTIDÃO NARRATIVA (AJUSTES 1, 2, 3 e 4)
+// 7. GERAÇÃO DA CERTIDÃO NARRATIVA (COM AGRUPAMENTO POR ANO)
 async function gerarPDF() {
-    if (todosResultadosPDF.length === 0) {
-        alert("Não há dados para gerar o PDF.");
-        return;
-    }
+    if (todosResultadosPDF.length === 0) return;
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     
-    // Configurações para o 4º Ajuste (Data e Hora do sistema)
     const dataObj = new Date();
     const dataFormatada = dataObj.toLocaleDateString('pt-BR');
-    const horaFormatada = dataObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     const dataExtenso = dataObj.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 
     // Layout Institucional
@@ -143,7 +137,7 @@ async function gerarPDF() {
     doc.text([
         "Secretaria Municipal da Fazenda",
         "Divisão de Cadastro Imobiliário",
-        "Documento gerado em: " + dataFormatada + " às " + horaFormatada
+        "Documento gerado em: " + dataFormatada
     ], 105, 30, { align: "center" });
     
     doc.setLineWidth(0.4);
@@ -153,7 +147,6 @@ async function gerarPDF() {
     doc.setFont("times", "bold");
     doc.text("CERTIDÃO NARRATIVA TÉCNICA ADMINISTRATIVA", 105, 55, { align: "center" });
 
-    // 1º Ajuste: Coleta de Logradouro e Número da tabela
     const ultimoRegistro = todosResultadosPDF[todosResultadosPDF.length - 1];
     
     doc.setFontSize(11);
@@ -164,40 +157,57 @@ async function gerarPDF() {
     const splitTexto = doc.splitTextToSize(textoNarrativo, 170);
     doc.text(splitTexto, 20, 70);
 
-    // 2º Ajuste: Tratamento de Múltiplas Utilizações e Estruturas
-    const utilizacoesUnicas = [...new Set(todosResultadosPDF.map(r => r.utilizacao))].join(" / ");
-    const estruturasUnicas = [...new Set(todosResultadosPDF.map(r => r.estrutura))].join(" / ");
-    const areaTotalConstruida = todosResultadosPDF.reduce((acc, curr) => acc + parseFloat(curr.metragem || 0), 0);
+    // Soma total de 2026 para o parecer
+    const resultados2026 = todosResultadosPDF.filter(r => r.ano === 2026);
+    const areaTotal2026 = resultados2026.reduce((acc, curr) => acc + curr.metragem, 0);
+    const utilizacoesUnicas = [...new Set(resultados2026.map(r => r.utilizacao))].join(" / ");
+    const estruturasUnicas = [...new Set(resultados2026.map(r => r.estrutura))].join(" / ");
 
     let parecer = "";
-    if (ultimoRegistro.inscricao.toString().endsWith(".000")) {
-        parecer = `I - Constatou-se que o imóvel supracitado é classificado tecnicamente como TERRENO VAGO, inexistindo benfeitorias ou edificações averbadas junto ao cadastro municipal até o exercício de ${ultimoRegistro.ano}.`;
+    if (areaTotal2026 === 0) {
+        parecer = `I - Constatou-se que o imóvel supracitado é classificado tecnicamente como TERRENO VAGO, inexistindo benfeitorias averbadas até o exercício de 2026.`;
     } else {
-        parecer = `I - Constatou-se que o imóvel supracitado possui EDIFICAÇÃO CONSOLIDADA com destinação de utilização ${utilizacoesUnicas} e padrão estrutural de ${estruturasUnicas}, totalizando área construída de ${areaTotalConstruida} m², conforme dados cadastrais atualizados em ${ultimoRegistro.ano}.`;
+        parecer = `I - Constatou-se que o imóvel supracitado possui EDIFICAÇÃO CONSOLIDADA com destinação de utilização ${utilizacoesUnicas} e padrão estrutural de ${estruturasUnicas}, totalizando área construída de ${areaTotal2026} m², conforme dados cadastrais atualizados em 2026.`;
     }
 
     const splitParecer = doc.splitTextToSize(parecer, 170);
     doc.text(splitParecer, 20, 95);
 
-    // 3º Ajuste: Quadro Analítico de Evolução Cadastral (Colunas ID, Descrição, Metragem Total)
+    // II - QUADRO ANALÍTICO (AGRUPADO POR ANO)
     doc.setFont("times", "bold");
     doc.text("II - QUADRO ANALÍTICO DE EVOLUÇÃO CADASTRAL (2020-2026):", 20, 115);
 
-    const headers = [["Inscrição (ID)", "Descrição das Edificações", "Metragem Total"]];
+    const headers = [["Inscrição (ID)", "Ano", "Descrição das Edificações", "Metragem Total"]];
     
-    const dataRows = todosResultadosPDF.map(res => {
-        let descricao = "";
-        let metragemTotalCol = "0";
+    // Lógica de agrupamento por ano
+    const anos = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
+    const dataRows = [];
 
-        if (res.utilizacao.toUpperCase().includes("TERRENO VAGO")) {
-            descricao = "TERRENO VAGO";
-            metragemTotalCol = "0";
-        } else {
-            // Descrição detalhada conforme solicitado: Tipologia, Metragem, Estrutura e Utilização
-            descricao = `${res.tipologia} | Metragem: ${res.metragem}m² | Estrutura: ${res.estrutura} | Utilização: ${res.utilizacao}`;
-            metragemTotalCol = `${res.metragem} m²`;
+    anos.forEach(ano => {
+        const registrosDoAno = todosResultadosPDF.filter(r => r.ano === ano);
+        if (registrosDoAno.length > 0) {
+            let descricoes = [];
+            let somaMetragem = 0;
+
+            registrosDoAno.forEach(reg => {
+                if (reg.utilizacao.toUpperCase().includes("TERRENO VAGO") || reg.metragem === 0) {
+                    descricoes.push("TERRENO VAGO");
+                } else {
+                    descricoes.push(`${reg.tipologia} | Área: ${reg.metragem}m² | Estrutura: ${reg.estrutura} | Uso: ${reg.utilizacao}`);
+                    somaMetragem += reg.metragem;
+                }
+            });
+
+            // Remover duplicados de "TERRENO VAGO" se houver mais de um registro vago no mesmo ano
+            const descFinal = [...new Set(descricoes)].join("\n");
+            
+            dataRows.push([
+                registrosDoAno[0].id,
+                ano.toString(),
+                descFinal,
+                somaMetragem > 0 ? `${somaMetragem} m²` : "0"
+            ]);
         }
-        return [res.id, descricao, metragemTotalCol];
     });
 
     doc.autoTable({
@@ -206,23 +216,21 @@ async function gerarPDF() {
         body: dataRows,
         theme: 'grid',
         headStyles: { fillColor: [44, 62, 80], textColor: [255, 255, 255], fontStyle: 'bold' },
-        styles: { font: "times", fontSize: 8, cellPadding: 3 },
+        styles: { font: "times", fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
         columnStyles: {
-            0: { cellWidth: 45 },
-            1: { cellWidth: 100 },
-            2: { cellWidth: 25 }
+            0: { cellWidth: 35 },
+            1: { cellWidth: 15 },
+            2: { cellWidth: 100 },
+            3: { cellWidth: 25 }
         },
         margin: { left: 20, right: 20 }
     });
 
-    // 4º Ajuste: Rodapé Clássico e Requintado com Hora
+    // Rodapé
     const finalY = doc.lastAutoTable.finalY + 20;
     doc.setFontSize(10);
-    doc.setFont("times", "italic");
-    doc.text(`O referido é verdade e dou fé. Certidão emitida via sistema eletrônico em ${dataFormatada} às ${horaFormatada}.`, 20, finalY);
-    
-    doc.setFont("times", "normal");
-    doc.text(`Cambé/PR, ${dataExtenso}.`, 20, finalY + 10);
+    doc.text(`O referido é verdade e dou fé. Certidão emitida via sistema eletrônico em ${dataFormatada}.`, 20, finalY);
+    doc.text(`Cambé/PR, ${dataExtenso}.`, 20, finalY + 8);
 
     doc.line(70, finalY + 35, 140, finalY + 35);
     doc.setFont("times", "bold");
@@ -231,25 +239,17 @@ async function gerarPDF() {
     doc.save(`Certidao_${ultimoRegistro.inscricao}.pdf`);
 }
 
-// 8. INTERAÇÃO DO MODAL E EVENTOS DE TECLADO
+// 8. EVENTOS
 document.getElementById("btnOrientacoes").addEventListener("click", () => document.getElementById("manual").classList.add("ativo"));
 document.getElementById("btnFechar").addEventListener("click", () => document.getElementById("manual").classList.remove("ativo"));
 
-document.getElementById("search").addEventListener("keypress", function(event) {
-    if (event.key === "Enter") {
-        event.preventDefault();
-        buscarDados();
-    }
+document.getElementById("search").addEventListener("keypress", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); buscarDados(); }
 });
 
-// 9. FUNÇÃO DO BOTÃO LIMPAR
 function limparConsulta() {
-    const campoBusca = document.getElementById('search');
-    campoBusca.value = "";
-    const tableBody = document.querySelector('#resultTable tbody');
-    tableBody.innerHTML = "";
-    const btnPDF = document.getElementById('btnPDF');
-    if (btnPDF) btnPDF.style.display = 'none';
+    document.getElementById('search').value = "";
+    document.querySelector('#resultTable tbody').innerHTML = "";
+    document.getElementById('btnPDF').style.display = 'none';
     todosResultadosPDF = [];
-    campoBusca.focus();
 }
