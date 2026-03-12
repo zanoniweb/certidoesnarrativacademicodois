@@ -15,6 +15,22 @@ function logout() {
     window.location.href = "index.html";
 }
 
+// SISTEMA DE LOGIN
+function login() {
+    const userInp = document.getElementById("username").value;
+    const passInp = document.getElementById("password").value;
+
+    // Procura o usuário na base de dados (item 2 do seu código)
+    const validUser = users.find(u => u.username === userInp && u.password === passInp);
+
+    if (validUser) {
+        localStorage.setItem("loggedIn", "true");
+        window.location.href = "consulta.html"; // Vai para a página de consulta
+    } else {
+        alert("Usuário ou senha incorretos!");
+    }
+}
+
 // 4. VARIÁVEL GLOBAL PARA O PDF
 let todosResultadosPDF = [];
 
