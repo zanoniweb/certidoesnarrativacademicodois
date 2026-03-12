@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SISTEMA DE LOGIN & SENHA: PARA ACESSO AO SISTEMA WEB DE CONSULTA DE INSCRIÇÃO MUNICIPAL: PARA FINALIDADE EMISSÃO DE CERTIDÕES NARRATIVAS.</title>
+
+<style>
+
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 0;
+}
+
+.login-container, .container {
+    background: white;
+    width: 300px;
+    margin: 100px auto;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0px 0px 10px gray;
+}
+
+input {
+    width: 90%;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+button {
+    background-color: #28a745;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+button:hover {
+    background-color: #218838;
+}
+
+#error-message {
+    color: red;
+}
+
+</style>
+
+
+</head>
+<body>
+    
+    <div class="login-container">
+        <h2>Login</h2>
+        <input type="text" id="username" placeholder="Usuário">
+        <input type="password" id="password" placeholder="Senha">
+        <button onclick="login()">Entrar</button>
+        <p id="error-message"></p>
+    </div>
+
+    <script src="script.js"></script>
+
+    <center>
+        <i>
+        <footer>
+
+             Web programa desenvolvido por Juliano <img src="https://d1yei2z3i6k35z.cloudfront.net/6946809/65e45ac72773e_zanoni.1.png" alt="Logo de Juliano Zanoni">, acadêmico do 7º semestre de Engenharia de Software da Universidade Anhanguera - Projeto de Extensão Acadêmica.
+
+        </footer>
+        </i>
+    </center>
+
+</body>
+</html>

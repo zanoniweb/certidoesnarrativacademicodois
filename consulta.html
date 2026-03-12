@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SISTEMA WEB DE CONSULTA DE INSCRIÇÃO MUNICIPAL: PARA FINALIDADE EMISSÃO DE CERTIDÕES NARRATIVAS.</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <h1>CONSULTA DE INSCRIÇÃO MUNICIPAL: PARA FINALIDADE EMISSÃO DE CERTIDÕES NARRATIVAS.</h1>
+    
+    <!--  CÓDIGO TEMPORARIAMENTE DESATIVADO PARA FUTURA FASE DE IMPLEMENTAÇÃO DE BANCO DE DADOS
+    <label for="fileInput">Carregar arquivos Excel (2020-2025):</label>
+    <input type="file" id="fileInput" multiple accept=".xlsx">
+    -->
+    
+    <label for="search">Inscrição Municipal:</label>
+    <input type="text" id="search" placeholder="Digite a inscrição (ex: 01.083.120.0050.001)">
+    
+    <button onclick="buscarDados()">Pesquisar</button> <!-- PESQUISAR -->
+
+    <button onclick="limparConsulta()" style="background-color: #7f8c8d; color: white;">Limpar</button> <!-- Limpar -->
+
+    <button onclick="gerarPDF()" id="btnPDF" style="display:none; background-color: #2c3e50; color: white;">Gerar Certidão PDF</button> <!-- Gerar PDF -->
+    
+    <button class="chat-button" id="btnOrientacoes">Orientações Chat</button> <!-- ORIENTAÇÕES -->
+    
+    <button onclick="logout()">Sair</button> <!-- SAIR -->
+
+    <h2>Resultado da Pesquisa</h2>
+    <table id="resultTable">
+        <thead>
+            <tr>
+                <th>Inscrição Municipal</th>
+                <th>Nº da Quadra</th>
+                <th>Nº do Lote</th>
+                <th>Ano</th>
+                <th>Metragem</th>
+                <th>Utilização</th>
+                <th>Estrutura</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <!--INICIO DO CÓDIGO DO BOTÃO DE ORIENTAÇÕES-->
+
+<div id="manual" class="manual">
+    <button class="chat-button" id="btnFechar">✖</button>
+    <h2>Explicação do Web Programa</h2>
+    
+    <ul>
+
+        <li>✔ Passo 1: Esse web programa foi desenvolvido com as linguagens de programação: HTML, CSS, JAVASCRIPT  e foi utilizado uma pastas tabela como diretório para armazenar as tabelas referentes aos dados fictícios de imóveis dos anos de 2020 até 2026.</li>
+        <li>✔ Passo 2: O objetivo do programa é possibilitar um sistema rápido e prático para a consulta de metragens edificadas ou não para a finalidade de elaboração de certidões narrativas. A princípio propronho que as tabelas de dados de cada ano podem ser construídas com os arquivos da emissão dos carnes de IPTU de cada ano, ou seja, esse seria um banco de dados para o programa web de consulta.</li>
+        <li>✔ Passo 3: O sistema deverá ser consultado pelos usuários de duas formas incialmente pelas inscrições com o final "000" e depois com o final com alguma númeração que já indiquem área edificada, por exemplo "001".</li>
+        <li>✔ Passo 4: A consulta individualizada por inscrição irá trazer as respectivas informações:  inscrição municipal, nº da quadra, nº do lote, ano, netragem, utilização e estrutura.</li>
+        <li>✔ Passo 5: Observo que a consulta nesse sistema não dispensa apuração nos sistemas internos da Prefeita para a finalidade de apuração se o contribuinte requereu alguma revisão histórica de IPTU que tangem a metragem.</li> 
+        <li>✔ Passo 6: Como exemplo coloco alguns exemplo de inscrições para teste de consulta: 1º caso: 08.777.141.0012.000 (que é um terreno vago); 2º caso 08.777.143.0012.998 (que continha edificação residencial por um período e depois se transformou numa edificação industrial) e o 3º caso 08.777.143.0024.999 (que trata-se de uma edificação que surgi apenas no ano de 2026).</li>
+        <li>✔ Passo 7: O Web Programa Digital é um fruto da extensão acadêmica do 7º semestre de Engenharia de Software da universidade Anhanguera no primeiro semestre de 2026. Ele foi projetado para otimizar o fluxo de trabalho da repartição, substituindo consultas manuais lentas por uma interface ágil e centralizada e com lógica de segurança para inibir que terceiros tenham acesso as informações. Este sistema transforma dados brutos em informações acessíveis, permitindo que o servidor público tome decisões técnicas com muito mais rapidez e precisão.</li>
+
+    </ul>
+</div>
+
+<!--FINAL DO CÓDIGO DO BOTÃO DE ORIENTAÇÕES-->
+
+    <center>
+
+        <i>
+
+        <footer>
+           
+            Web programa desenvolvido por Juliano <img src="https://d1yei2z3i6k35z.cloudfront.net/6946809/65e45ac72773e_zanoni.1.png" alt="Logo de Juliano Zanoni">, acadêmico do 7º semestre de Engenharia de Software da Universidade Anhanguera - Projeto de Extensão Acadêmica.
+           
+        </footer>
+
+        </i>
+
+    </center>
+
+    <script src="script.js"></script>
+</body>
+</html>
