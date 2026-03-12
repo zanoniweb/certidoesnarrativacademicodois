@@ -1,5 +1,6 @@
-// 1. PROTEÇÃO DE ROTA
-if (!localStorage.getItem("loggedIn") && window.location.pathname.includes("consulta.html")) {
+// 1. PROTEÇÃO DE ROTA (Melhorada para evitar bloqueios no login)
+const isLoginPage = window.location.pathname.endsWith("index.html") || window.location.pathname === "/";
+if (!localStorage.getItem("loggedIn") && !isLoginPage) {
     window.location.href = "index.html";
 }
 
@@ -9,32 +10,30 @@ const users = [
     { username: "jzanoni", password: "180804" }
 ];
 
-// 3. SISTEMA DE AUTENTICAÇÃO
-function logout() {
-    localStorage.removeItem("loggedIn");
-    window.location.href = "index.html";
-}
-
-// SISTEMA DE LOGIN
+// 3. SISTEMA DE LOGIN E LOGOUT
 function login() {
-    const userInp = document.getElementById("username").value;
-    const passInp = document.getElementById("password").value;
+    const userInp = document.getElementById("username").value.trim();
+    const passInp = document.getElementById("password").value.trim();
 
-    // Procura o usuário na base de dados (item 2 do seu código)
     const validUser = users.find(u => u.username === userInp && u.password === passInp);
 
     if (validUser) {
         localStorage.setItem("loggedIn", "true");
-        window.location.href = "consulta.html"; // Vai para a página de consulta
+        window.location.href = "consulta.html"; 
     } else {
         alert("Usuário ou senha incorretos!");
     }
 }
 
+function logout() {
+    localStorage.removeItem("loggedIn");
+    window.location.href = "index.html";
+}
+
 // 4. VARIÁVEL GLOBAL PARA O PDF
 let todosResultadosPDF = [];
 
-// 5. BUSCA DE DADOS (CORRIGIDA E BLINDADA)
+// 5. BUSCA DE DADOS (BLINDADA PARA ID 08.777.141.0030.001)
 async function buscarDados() {
     const campoBusca = document.getElementById('search');
     const valorDigitado = campoBusca.value.trim();
@@ -44,7 +43,6 @@ async function buscarDados() {
         return;
     }
 
-    // Função para remover pontos, traços e espaços para comparação pura
     const limpar = (txt) => txt.toString().replace(/\D/g, '');
     const buscaLimpa = limpar(valorDigitado);
 
@@ -52,7 +50,7 @@ async function buscarDados() {
     let resultadosBrutos = [];
     
     const tableBody = document.querySelector('#resultTable tbody');
-    tableBody.innerHTML = '<tr><td colspan="7">Localizando histórico completo (Edificações e Áreas)...</td></tr>';
+    if(tableBody) tableBody.innerHTML = '<tr><td colspan="7">Localizando histórico completo...</td></tr>';
 
     for (let ano of anos) {
         const url = `tabelas/${ano}.xlsx`;
@@ -63,15 +61,12 @@ async function buscarDados() {
             const data = await response.arrayBuffer();
             const workbook = XLSX.read(data, { type: 'array' });
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-            
-            // defval: "" garante que colunas vazias não desloquem os dados
             const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
 
             json.forEach(row => {
-                const colA = row[0] ? row[0].toString().trim() : ""; // Inscrição
-                const colB = row[1] ? row[1].toString().trim() : ""; // ID Agrupador
+                const colA = row[0] ? row[0].toString().trim() : "";
+                const colB = row[1] ? row[1].toString().trim() : "";
 
-                // Se o que o usuário digitou bater com a Coluna A OU Coluna B (limpos)
                 if (limpar(colA) === buscaLimpa || limpar(colB) === buscaLimpa) {
                     resultadosBrutos.push({
                         inscricao: colA,
@@ -81,15 +76,15 @@ async function buscarDados() {
                         quadra: row[4] || '---',
                         lote: row[5] || '---',
                         ano: ano,
-                        metragem: parseFloat(row[7]) || 0, // Coluna H
-                        tipologia: row[8] || '',           // Coluna I
-                        utilizacao: row[9] || 'N/A',       // Coluna J
-                        estrutura: row[10] || 'N/A',       // Coluna K
+                        metragem: parseFloat(row[7]) || 0,
+                        tipologia: row[8] || '',
+                        utilizacao: row[9] || 'N/A',
+                        estrutura: row[10] || 'N/A',
                     });
                 }
             });
         } catch (error) {
-            console.error(`Erro ao processar ano ${ano}:`, error);
+            console.error(`Erro no ano ${ano}:`, error);
         }
     }
     
@@ -97,14 +92,16 @@ async function buscarDados() {
     exibirResultadosNaTela(resultadosBrutos);
 }
 
-// 6. EXIBIÇÃO NA TELA (SOMA TOTAL POR ANO)
+// 6. EXIBIÇÃO NA TELA
 function exibirResultadosNaTela(resultados) {
     const tableBody = document.querySelector('#resultTable tbody');
     const btnPDF = document.getElementById('btnPDF');
+    if(!tableBody) return;
+    
     tableBody.innerHTML = '';
 
     if (resultados.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="7">Nenhum registro encontrado para esta inscrição.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="7">Nenhum registro encontrado.</td></tr>`;
         if(btnPDF) btnPDF.style.display = 'none';
         return;
     }
@@ -132,10 +129,9 @@ function exibirResultadosNaTela(resultados) {
     });
 }
 
-// 7. GERAÇÃO DO PDF (CERTIDÃO NARRATIVA COMPLETA)
+// 7. GERAÇÃO DO PDF (CERTIDÃO NARRATIVA)
 async function gerarPDF() {
     if (todosResultadosPDF.length === 0) return;
-
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     
@@ -143,28 +139,21 @@ async function gerarPDF() {
     const dataFormatada = dataObj.toLocaleDateString('pt-BR');
     const dataExtenso = dataObj.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 
-    // Cabeçalho Institucional
-    doc.setFont("times", "bold");
-    doc.setFontSize(14);
+    doc.setFont("times", "bold").setFontSize(14);
     doc.text("ESTADO DO PARANÁ", 105, 15, { align: "center" });
     doc.text("PREFEITURA MUNICIPAL", 105, 22, { align: "center" });
-    doc.setFontSize(10);
-    doc.setFont("times", "normal");
+    doc.setFontSize(10).setFont("times", "normal");
     doc.text(`Documento gerado em: ${dataFormatada}`, 105, 30, { align: "center" });
     doc.line(20, 35, 190, 35);
 
-    doc.setFontSize(12);
-    doc.setFont("times", "bold");
+    const u = todosResultadosPDF[todosResultadosPDF.length - 1];
+    doc.setFontSize(12).setFont("times", "bold");
     doc.text("CERTIDÃO NARRATIVA TÉCNICA ADMINISTRATIVA", 105, 45, { align: "center" });
 
-    // Dados do Imóvel (usa o último registro como referência de endereço)
-    const u = todosResultadosPDF[todosResultadosPDF.length - 1];
-    doc.setFontSize(11);
-    doc.setFont("times", "normal");
-    let textoIntro = `CERTIFICA-SE para os devidos fins que o imóvel identificado pelo ID nº ${u.id}, Quadra ${u.quadra}, Lote ${u.lote}, localizado na ${u.logradouro}, nº ${u.numero}, apresenta a seguinte evolução de área edificada:`;
+    doc.setFontSize(11).setFont("times", "normal");
+    let textoIntro = `CERTIFICA-SE que o imóvel ID nº ${u.id}, Quadra ${u.quadra}, Lote ${u.lote}, apresenta a seguinte evolução:`;
     doc.text(doc.splitTextToSize(textoIntro, 170), 20, 55);
 
-    // Tabela Analítica
     const headers = [["ID / INSCRIÇÃO", "ANO", "DESCRIÇÃO DAS EDIFICAÇÕES", "ÁREA TOTAL"]];
     const dataRows = [];
     const listaAnos = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
@@ -172,24 +161,15 @@ async function gerarPDF() {
     listaAnos.forEach(ano => {
         const regs = todosResultadosPDF.filter(r => r.ano === ano);
         if (regs.length > 0) {
-            let descritivo = "";
-            let areaAnual = 0;
-            
+            let desc = "";
+            let area = 0;
             regs.forEach(r => {
                 if(r.metragem > 0) {
-                    descritivo += `• ${r.tipologia} (${r.estrutura}): ${r.metragem.toFixed(2)}m²\n`;
-                    areaAnual += r.metragem;
+                    desc += `• ${r.tipologia} (${r.estrutura}): ${r.metragem.toFixed(2)}m²\n`;
+                    area += r.metragem;
                 }
             });
-
-            if (areaAnual === 0) descritivo = "TERRENO VAGO";
-
-            dataRows.push([
-                regs[0].id,
-                ano.toString(),
-                descritivo.trim(),
-                `${areaAnual.toFixed(2)} m²`
-            ]);
+            dataRows.push([regs[0].id, ano.toString(), (area === 0 ? "TERRENO VAGO" : desc.trim()), `${area.toFixed(2)} m²`]);
         }
     });
 
@@ -198,38 +178,25 @@ async function gerarPDF() {
         head: headers,
         body: dataRows,
         theme: 'grid',
-        headStyles: { fillColor: [44, 62, 80], fontStyle: 'bold' },
-        styles: { font: "times", fontSize: 9, cellPadding: 3 },
-        columnStyles: { 
-            0: { cellWidth: 40 }, 
-            1: { cellWidth: 15 }, 
-            2: { cellWidth: 95 }, 
-            3: { cellWidth: 25 } 
-        }
+        styles: { font: "times", fontSize: 9 },
+        columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 15 }, 2: { cellWidth: 95 }, 3: { cellWidth: 25 } }
     });
 
-    // Assinatura
     const finalY = doc.lastAutoTable.finalY + 25;
     doc.text(`Cambé/PR, ${dataExtenso}.`, 20, finalY);
-    doc.line(70, finalY + 20, 140, finalY + 20);
     doc.text("Agente Administrativo Responsável", 105, finalY + 25, { align: "center" });
-
     doc.save(`Certidao_${u.id}.pdf`);
 }
 
-// 8. EVENTOS DE INTERAÇÃO
-document.getElementById("btnOrientacoes").addEventListener("click", () => {
-    document.getElementById("manual").classList.add("ativo");
-});
+// 8. EVENTOS
+const btnOri = document.getElementById("btnOrientacoes");
+if(btnOri) btnOri.addEventListener("click", () => document.getElementById("manual").classList.add("ativo"));
 
-document.getElementById("btnFechar").addEventListener("click", () => {
-    document.getElementById("manual").classList.remove("ativo");
-});
+const btnFech = document.getElementById("btnFechar");
+if(btnFech) btnFech.addEventListener("click", () => document.getElementById("manual").classList.remove("ativo"));
 
-// Atalho Enter para busca
-document.getElementById("search").addEventListener("keypress", (e) => {
-    if (e.key === "Enter") buscarDados();
-});
+const searchInp = document.getElementById("search");
+if(searchInp) searchInp.addEventListener("keypress", (e) => { if (e.key === "Enter") buscarDados(); });
 
 function limparConsulta() {
     document.getElementById('search').value = "";
