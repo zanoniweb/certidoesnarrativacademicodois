@@ -10,7 +10,7 @@ const users = [
     { username: "jzanoni", password: "180804" }
 ];
 
-// --- AJUSTE 3: DICIONÁRIO DE LOTEAMENTOS ---
+// 3. DICIONÁRIO DE LOTEAMENTOS
 const mapeamentoLoteamentos = {
     "777": "Jd das Frutas",
     "778": "Jd Personalidades Históricas",
@@ -18,7 +18,6 @@ const mapeamentoLoteamentos = {
 };
 
 function obterNomeLoteamento(inscricao) {
-    // Extrai os 3 dígitos após o primeiro ponto (ex: 08.777...)
     const partes = inscricao.split('.');
     if (partes.length > 1) {
         const codigo = partes[1];
@@ -27,7 +26,7 @@ function obterNomeLoteamento(inscricao) {
     return "Não informado";
 }
 
-// 3. SISTEMA DE LOGIN E LOGOUT
+// 4. SISTEMA DE LOGIN E LOGOUT
 function login() {
     const userInp = document.getElementById("username").value.trim();
     const passInp = document.getElementById("password").value.trim();
@@ -46,9 +45,10 @@ function logout() {
     window.location.href = "index.html";
 }
 
+// 5. VARIÁVEL GLOBAL
 let todosResultadosPDF = [];
 
-// 5. BUSCA DE DADOS
+// 6. BUSCA DE DADOS
 async function buscarDados() {
     const campoBusca = document.getElementById('search');
     const valorDigitado = campoBusca.value.trim();
@@ -91,10 +91,10 @@ async function buscarDados() {
                         lote: row[5] || '---',
                         ano: ano,
                         metragem: parseFloat(row[7]) || 0,
-                        tipologia: row[8] || '',
+                        tipology: row[8] || '',
                         utilizacao: row[9] || 'N/A',
                         estrutura: row[10] || 'N/A',
-                        loteamento: obterNomeLoteamento(colA) // Vincula o loteamento aqui
+                        loteamento: obterNomeLoteamento(colA)
                     });
                 }
             });
@@ -107,14 +107,13 @@ async function buscarDados() {
     exibirResultadosNaTela(resultadosBrutos);
 }
 
-// 6. EXIBIÇÃO NA TELA
+// 7. EXIBIÇÃO NA TELA
 function exibirResultadosNaTela(resultados) {
     const tableBody = document.querySelector('#resultTable tbody');
     const btnPDF = document.getElementById('btnPDF');
     if(!tableBody) return;
     
     tableBody.innerHTML = '';
-
     if (resultados.length === 0) {
         tableBody.innerHTML = `<tr><td colspan="7">Nenhum registro encontrado.</td></tr>`;
         if(btnPDF) btnPDF.style.display = 'none';
@@ -143,7 +142,7 @@ function exibirResultadosNaTela(resultados) {
     });
 }
 
-// 7. GERAÇÃO DO PDF (CERTIDÃO NARRATIVA COM AJUSTES 1 E 2)
+// 8. GERAÇÃO DO PDF (UNIFICADA COM TODAS AS INFORMAÇÕES SOLICITADAS)
 async function gerarPDF() {
     if (todosResultadosPDF.length === 0) return;
     const { jsPDF } = window.jspdf;
@@ -153,6 +152,7 @@ async function gerarPDF() {
     const dataFormatada = dataObj.toLocaleDateString('pt-BR');
     const dataExtenso = dataObj.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 
+    // Cabeçalho institucional
     doc.setFont("times", "bold").setFontSize(14);
     doc.text("ESTADO DO PARANÁ", 105, 15, { align: "center" });
     doc.text("PREFEITURA MUNICIPAL", 105, 22, { align: "center" });
@@ -160,29 +160,26 @@ async function gerarPDF() {
     doc.text(`Documento gerado em: ${dataFormatada}`, 105, 30, { align: "center" });
     doc.line(20, 35, 190, 35);
 
-    // Seleciona o registro mais recente para o cabeçalho
     const u = todosResultadosPDF[todosResultadosPDF.length - 1];
-    
-    // Calcula área total para definir se é Terreno Vago ou Edificação
-    const areaTotalGeral = todosResultadosPDF.reduce((acc, curr) => acc + curr.metragem, 0);
     
     doc.setFontSize(12).setFont("times", "bold");
     doc.text("CERTIDÃO NARRATIVA TÉCNICA ADMINISTRATIVA", 105, 45, { align: "center" });
 
     doc.setFontSize(11).setFont("times", "normal");
 
-    // --- AJUSTES 1 E 2: LÓGICA DO TEXTO INTRODUTÓRIO ---
-    let textoIntro = "";
-    if (areaTotalGeral === 0) {
-        // Ajuste 1: Terreno Vago (ID, Logradouro, Número, Loteamento)
-        textoIntro = `CERTIFICA-SE que o imóvel ID nº ${u.id}, ${u.logradouro}, nº ${u.numero}, ${u.loteamento.toUpperCase()}, apresenta a seguinte evolução:`;
-    } else {
-        // Ajuste 2: Edificações (ID, Logradouro, Número)
-        textoIntro = `CERTIFICA-SE que o imóvel ID nº ${u.id}, ${u.logradouro}, nº ${u.numero}, apresenta a seguinte evolução:`;
-    }
+    // Preparação dos dados
+    const logradouro = u.logradouro || "Logradouro não informado";
+    const numero = u.numero || "S/N";
+    const quadra = u.quadra || "---";
+    const lote = u.lote || "---";
+    const loteamento = u.loteamento ? u.loteamento.toUpperCase() : "LOTEAMENTO NÃO INFORMADO";
+
+    // Texto agora é único para ambos os casos, contendo todos os campos
+    let textoIntro = `CERTIFICA-SE que o imóvel ID nº ${u.id}, Quadra ${quadra}, Lote ${lote}, situado na ${logradouro}, nº ${numero}, no ${loteamento}, apresenta a seguinte evolução:`;
 
     doc.text(doc.splitTextToSize(textoIntro, 170), 20, 55);
 
+    // Tabela de Dados
     const headers = [["ID / INSCRIÇÃO", "ANO", "DESCRIÇÃO DAS EDIFICAÇÕES", "ÁREA TOTAL"]];
     const dataRows = [];
     const listaAnos = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
@@ -194,7 +191,7 @@ async function gerarPDF() {
             let area = 0;
             regs.forEach(r => {
                 if(r.metragem > 0) {
-                    desc += `• ${r.tipologia} (${r.estrutura}): ${r.metragem.toFixed(2)}m²\n`;
+                    desc += `• ${r.tipology} (${r.estrutura}): ${r.metragem.toFixed(2)}m²\n`;
                     area += r.metragem;
                 }
             });
@@ -217,15 +214,13 @@ async function gerarPDF() {
     doc.save(`Certidao_${u.id}.pdf`);
 }
 
-// 8. EVENTOS E AUXILIARES (Mantidos)
+// 9. EVENTOS
 const searchInp = document.getElementById("search");
 if(searchInp) searchInp.addEventListener("keypress", (e) => { if (e.key === "Enter") buscarDados(); });
 
 function limparConsulta() {
     document.getElementById('search').value = "";
-    const tb = document.querySelector('#resultTable tbody');
-    if(tb) tb.innerHTML = "";
-    const b = document.getElementById('btnPDF');
-    if(b) b.style.display = 'none';
+    if(document.querySelector('#resultTable tbody')) document.querySelector('#resultTable tbody').innerHTML = "";
+    if(document.getElementById('btnPDF')) document.getElementById('btnPDF').style.display = 'none';
     todosResultadosPDF = [];
 }
