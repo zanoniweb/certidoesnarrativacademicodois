@@ -1,4 +1,4 @@
-// 1. PROTEÇÃO DE ROTA (Melhorada para evitar bloqueios no login)
+// 1. PROTEÇÃO DE ROTA
 const isLoginPage = window.location.pathname.endsWith("index.html") || window.location.pathname === "/";
 if (!localStorage.getItem("loggedIn") && !isLoginPage) {
     window.location.href = "index.html";
@@ -10,11 +10,27 @@ const users = [
     { username: "jzanoni", password: "180804" }
 ];
 
+// --- AJUSTE 3: DICIONÁRIO DE LOTEAMENTOS ---
+const mapeamentoLoteamentos = {
+    "777": "Jd das Frutas",
+    "778": "Jd Personalidades Históricas",
+    "779": "Jd Clubes Esportivos"
+};
+
+function obterNomeLoteamento(inscricao) {
+    // Extrai os 3 dígitos após o primeiro ponto (ex: 08.777...)
+    const partes = inscricao.split('.');
+    if (partes.length > 1) {
+        const codigo = partes[1];
+        return mapeamentoLoteamentos[codigo] || "Loteamento não identificado";
+    }
+    return "Não informado";
+}
+
 // 3. SISTEMA DE LOGIN E LOGOUT
 function login() {
     const userInp = document.getElementById("username").value.trim();
     const passInp = document.getElementById("password").value.trim();
-
     const validUser = users.find(u => u.username === userInp && u.password === passInp);
 
     if (validUser) {
@@ -30,10 +46,9 @@ function logout() {
     window.location.href = "index.html";
 }
 
-// 4. VARIÁVEL GLOBAL PARA O PDF
 let todosResultadosPDF = [];
 
-// 5. BUSCA DE DADOS (BLINDADA PARA ID 08.777.141.0030.001)
+// 5. BUSCA DE DADOS
 async function buscarDados() {
     const campoBusca = document.getElementById('search');
     const valorDigitado = campoBusca.value.trim();
@@ -45,7 +60,6 @@ async function buscarDados() {
 
     const limpar = (txt) => txt.toString().replace(/\D/g, '');
     const buscaLimpa = limpar(valorDigitado);
-
     const anos = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
     let resultadosBrutos = [];
     
@@ -80,6 +94,7 @@ async function buscarDados() {
                         tipologia: row[8] || '',
                         utilizacao: row[9] || 'N/A',
                         estrutura: row[10] || 'N/A',
+                        loteamento: obterNomeLoteamento(colA) // Vincula o loteamento aqui
                     });
                 }
             });
@@ -107,7 +122,6 @@ function exibirResultadosNaTela(resultados) {
     }
 
     if(btnPDF) btnPDF.style.display = 'inline-block';
-
     const anosPresentes = [...new Set(resultados.map(r => r.ano))];
     
     anosPresentes.forEach(ano => {
@@ -129,7 +143,7 @@ function exibirResultadosNaTela(resultados) {
     });
 }
 
-// 7. GERAÇÃO DO PDF (CERTIDÃO NARRATIVA)
+// 7. GERAÇÃO DO PDF (CERTIDÃO NARRATIVA COM AJUSTES 1 E 2)
 async function gerarPDF() {
     if (todosResultadosPDF.length === 0) return;
     const { jsPDF } = window.jspdf;
@@ -146,12 +160,27 @@ async function gerarPDF() {
     doc.text(`Documento gerado em: ${dataFormatada}`, 105, 30, { align: "center" });
     doc.line(20, 35, 190, 35);
 
+    // Seleciona o registro mais recente para o cabeçalho
     const u = todosResultadosPDF[todosResultadosPDF.length - 1];
+    
+    // Calcula área total para definir se é Terreno Vago ou Edificação
+    const areaTotalGeral = todosResultadosPDF.reduce((acc, curr) => acc + curr.metragem, 0);
+    
     doc.setFontSize(12).setFont("times", "bold");
     doc.text("CERTIDÃO NARRATIVA TÉCNICA ADMINISTRATIVA", 105, 45, { align: "center" });
 
     doc.setFontSize(11).setFont("times", "normal");
-    let textoIntro = `CERTIFICA-SE que o imóvel ID nº ${u.id}, Quadra ${u.quadra}, Lote ${u.lote}, apresenta a seguinte evolução:`;
+
+    // --- AJUSTES 1 E 2: LÓGICA DO TEXTO INTRODUTÓRIO ---
+    let textoIntro = "";
+    if (areaTotalGeral === 0) {
+        // Ajuste 1: Terreno Vago (ID, Logradouro, Número, Loteamento)
+        textoIntro = `CERTIFICA-SE que o imóvel ID nº ${u.id}, ${u.logradouro}, nº ${u.numero}, ${u.loteamento.toUpperCase()}, apresenta a seguinte evolução:`;
+    } else {
+        // Ajuste 2: Edificações (ID, Logradouro, Número)
+        textoIntro = `CERTIFICA-SE que o imóvel ID nº ${u.id}, ${u.logradouro}, nº ${u.numero}, apresenta a seguinte evolução:`;
+    }
+
     doc.text(doc.splitTextToSize(textoIntro, 170), 20, 55);
 
     const headers = [["ID / INSCRIÇÃO", "ANO", "DESCRIÇÃO DAS EDIFICAÇÕES", "ÁREA TOTAL"]];
@@ -188,19 +217,15 @@ async function gerarPDF() {
     doc.save(`Certidao_${u.id}.pdf`);
 }
 
-// 8. EVENTOS
-const btnOri = document.getElementById("btnOrientacoes");
-if(btnOri) btnOri.addEventListener("click", () => document.getElementById("manual").classList.add("ativo"));
-
-const btnFech = document.getElementById("btnFechar");
-if(btnFech) btnFech.addEventListener("click", () => document.getElementById("manual").classList.remove("ativo"));
-
+// 8. EVENTOS E AUXILIARES (Mantidos)
 const searchInp = document.getElementById("search");
 if(searchInp) searchInp.addEventListener("keypress", (e) => { if (e.key === "Enter") buscarDados(); });
 
 function limparConsulta() {
     document.getElementById('search').value = "";
-    document.querySelector('#resultTable tbody').innerHTML = "";
-    document.getElementById('btnPDF').style.display = 'none';
+    const tb = document.querySelector('#resultTable tbody');
+    if(tb) tb.innerHTML = "";
+    const b = document.getElementById('btnPDF');
+    if(b) b.style.display = 'none';
     todosResultadosPDF = [];
 }
