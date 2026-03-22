@@ -6,7 +6,8 @@ if (!localStorage.getItem("loggedIn") && !isLoginPage) {
 
 // 2. BASE DE USUÁRIOS
 const users = [
-    { username: "alemaochefe", password: "alemao1234" },
+    { username: "alemaochefe", password: "alemao1234" },  
+    { username: "visitanteadm", password: "visitanteadm1234" },
     { username: "jzanoni", password: "180804" }
 ];
 
